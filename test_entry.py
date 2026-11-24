@@ -14,6 +14,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import main as entry_main
+
 REPO = Path(__file__).resolve().parent
 MAIN = REPO / "main.py"
 
@@ -67,6 +69,31 @@ class TestGate(unittest.TestCase):
         text = read_entry()
         self.assertNotIn("\n", text, "entry must be a single line, no newlines")
         self.assertEqual(text, text.strip(), "entry must not start/end with spaces")
+
+
+class TestLengthGuard(unittest.TestCase):
+    def test_rejects_pitch_over_220_chars(self):
+        """A pitch over the 220-char gate must fail loudly, not write
+        an entry the sealed scorer would score Valid=0."""
+        tmp = Path(tempfile.mkdtemp(prefix="sheetbelt-guard-"))
+        out_dir = tmp / "output"
+        original_pitch = entry_main.PITCH
+        original_env = os.environ.get("MAKEFUN_OUTPUT_DIR")
+        try:
+            entry_main.PITCH = "x" * 221
+            os.environ["MAKEFUN_OUTPUT_DIR"] = str(out_dir)
+            with self.assertRaises(SystemExit):
+                entry_main.main()
+        finally:
+            entry_main.PITCH = original_pitch
+            if original_env is None:
+                os.environ.pop("MAKEFUN_OUTPUT_DIR", None)
+            else:
+                os.environ["MAKEFUN_OUTPUT_DIR"] = original_env
+        self.assertFalse(
+            (out_dir / "entry.txt").exists(),
+            "no entry.txt may be written when the pitch exceeds 220 chars",
+        )
 
 
 if __name__ == "__main__":
